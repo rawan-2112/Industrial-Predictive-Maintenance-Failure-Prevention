@@ -60,3 +60,4 @@ project-5-predictive-maintenance/
 ## Team workflow (Git/GitHub)
 See the step-by-step guide in the chat for creating the GitHub repo, pushing this folder,
 and how each teammate should branch/PR their own part.
+
