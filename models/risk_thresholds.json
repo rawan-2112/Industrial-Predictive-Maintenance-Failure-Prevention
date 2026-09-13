@@ -1,0 +1,14 @@
+{
+    "optimal_threshold": 0.26,
+    "threshold_low": 0.15,
+    "threshold_medium": 0.26,
+    "threshold_critical": 0.75,
+    "risk_tiers": {
+        "Low": "P < 0.15",
+        "Medium": "0.15 <= P < 0.26",
+        "High": "0.26 <= P < 0.75",
+        "Critical": "P >= 0.75"
+    },
+    "cost_fn_usd": 5000,
+    "cost_fp_usd": 500
+}
