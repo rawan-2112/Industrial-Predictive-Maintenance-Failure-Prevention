@@ -1,6 +1,6 @@
 ucimlrepo
 pandas
-numpy>=1.24.0,<2.0.0
+numpy
 matplotlib
 seaborn
 scipy
@@ -11,3 +11,6 @@ jupyter
 nbclient
 nbformat
 ipykernel
+streamlit
+plotly
+pytest
