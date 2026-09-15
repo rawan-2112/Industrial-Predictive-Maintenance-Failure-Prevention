@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
 import joblib
+from maintenance_agent import build_recommendation_context
 
 try:
     import sklearn._loss._loss as _loss_mod
@@ -87,6 +88,19 @@ def predict_health(df: pd.DataFrame) -> pd.DataFrame:
     res['risk_tier'] = [assign_tier(p) for p in probs]
     res['alert_flag'] = (probs >= risk_thresholds['optimal_threshold']).astype(int)
     return res
+
+
+def build_maintenance_recommendation(row: pd.Series) -> dict:
+    metrics = row.to_dict()
+    failure_probability = float(metrics.get('failure_probability', 0.0) or 0.0)
+    risk_tier = metrics.get('risk_tier', 'Low Risk')
+    failure_mode = metrics.get('primary_failure_mode') or metrics.get('failure_mode')
+    return build_recommendation_context(
+        failure_probability=failure_probability,
+        risk_tier=risk_tier,
+        failure_mode=failure_mode,
+        metrics=metrics,
+    )
 
 def get_prescriptive_order(row: pd.Series) -> dict:
     p = row.get('failure_probability', 0.0)
@@ -204,8 +218,11 @@ if menu_choice == "1. Live Machine Health":
     p_val = out_df['failure_probability'].iloc[0]
     anom_val = out_df['anomaly_score'].iloc[0]
     tier_val = out_df['risk_tier'].iloc[0]
-    presc_info = get_prescriptive_order(pd.Series({**inp_df.iloc[0].to_dict(), **out_df.iloc[0].to_dict()}))
-    
+    row_with_prediction = pd.Series({**inp_df.iloc[0].to_dict(), **out_df.iloc[0].to_dict()})
+    presc_info = build_maintenance_recommendation(row_with_prediction)
+    if 'primary_failure_mode' not in presc_info:
+        presc_info = get_prescriptive_order(row_with_prediction)
+
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Failure Probability", f"{p_val * 100:.1f} %")
     k2.metric("Risk Tier", tier_val)
@@ -222,9 +239,20 @@ if menu_choice == "1. Live Machine Health":
     fig_g.update_layout(height=280, margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig_g, use_container_width=True)
     
-    st.subheader("Prescriptive Maintenance Protocol")
+    st.subheader("Advanced Maintenance AI Advisor")
     st.info(f"Diagnosis: {presc_info['primary_failure_mode']} | Priority: {presc_info['priority']} | Window: {presc_info['eta']}")
-    st.write(f"Action: {presc_info['recommended_action']}")
+    st.write(f"Grounded summary: {presc_info['summary']}")
+    st.write(f"Recommended action: {presc_info['action'] if 'action' in presc_info else presc_info['recommended_action']}")
+
+    with st.expander("Evidence and maintenance checklist"):
+        for evidence in presc_info.get('evidence', []):
+            st.markdown(f"- {evidence}")
+        st.markdown("### Recommended steps")
+        for step in presc_info.get('maintenance_steps', presc_info.get('technician_checklist', [])):
+            st.markdown(f"- {step}")
+        st.markdown("### Required spare parts")
+        for part in presc_info.get('required_spare_parts', []):
+            st.markdown(f"- {part}")
     
     if st.button("Save Record to SQLite Database"):
         log_to_db({
