@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
 import joblib
-from maintenance_agent import build_recommendation_context
+from maintenance_agent import get_rag_recommendation
 
 try:
     import sklearn._loss._loss as _loss_mod
@@ -95,7 +95,7 @@ def build_maintenance_recommendation(row: pd.Series) -> dict:
     failure_probability = float(metrics.get('failure_probability', 0.0) or 0.0)
     risk_tier = metrics.get('risk_tier', 'Low Risk')
     failure_mode = metrics.get('primary_failure_mode') or metrics.get('failure_mode')
-    return build_recommendation_context(
+    return get_rag_recommendation(
         failure_probability=failure_probability,
         risk_tier=risk_tier,
         failure_mode=failure_mode,
@@ -183,6 +183,19 @@ def log_to_db(rec: dict):
     conn.commit()
     conn.close()
 
+
+PRESET_CONFIG = {
+    "Nominal Machine": {"air_temperature_k": 298.1, "process_temperature_k": 308.6, "rotation_speed_rpm": 1550, "torque_nm": 40.0, "tool_wear_min": 20, "machine_type": "M"},
+    "Heat Dissipation (HDF)": {"air_temperature_k": 304.5, "process_temperature_k": 309.0, "rotation_speed_rpm": 1250, "torque_nm": 65.0, "tool_wear_min": 80, "machine_type": "L"},
+    "Tool Wear (TWF)": {"air_temperature_k": 298.5, "process_temperature_k": 308.7, "rotation_speed_rpm": 1420, "torque_nm": 48.0, "tool_wear_min": 225, "machine_type": "L"},
+    "Overstrain (OSF)": {"air_temperature_k": 299.0, "process_temperature_k": 309.5, "rotation_speed_rpm": 1350, "torque_nm": 70.0, "tool_wear_min": 210, "machine_type": "L"},
+    "Power Anomaly (PWF)": {"air_temperature_k": 298.0, "process_temperature_k": 308.0, "rotation_speed_rpm": 2700, "torque_nm": 15.0, "tool_wear_min": 150, "machine_type": "H"},
+}
+
+
+def get_preset_params(preset_name: str) -> dict:
+    return PRESET_CONFIG.get(preset_name, PRESET_CONFIG["Nominal Machine"]).copy()
+
 st.sidebar.title("Navigation")
 menu_choice = st.sidebar.radio("Go to:", [
     "1. Live Machine Health",
@@ -198,21 +211,40 @@ if menu_choice == "1. Live Machine Health":
     col_p, col_id = st.columns([2, 1])
     preset = col_p.selectbox("Select Preset", ["Nominal Machine", "Heat Dissipation (HDF)", "Tool Wear (TWF)", "Overstrain (OSF)", "Power Anomaly (PWF)"])
     machine_id = col_id.text_input("Asset ID", "MILL-ASSET-101")
-    p_dict = {
-        "Nominal Machine": {"air": 298.1, "proc": 308.6, "rpm": 1550, "trq": 40.0, "wear": 20, "type": "M"},
-        "Heat Dissipation (HDF)": {"air": 304.5, "proc": 309.0, "rpm": 1250, "trq": 65.0, "wear": 80, "type": "L"},
-        "Tool Wear (TWF)": {"air": 298.5, "proc": 308.7, "rpm": 1420, "trq": 48.0, "wear": 225, "type": "L"},
-        "Overstrain (OSF)": {"air": 299.0, "proc": 309.5, "rpm": 1350, "trq": 70.0, "wear": 210, "type": "L"},
-        "Power Anomaly (PWF)": {"air": 298.0, "proc": 308.0, "rpm": 2700, "trq": 15.0, "wear": 150, "type": "H"}
-    }[preset]
+    p_dict = get_preset_params(preset)
+
+    if "preset_values" not in st.session_state:
+        st.session_state["preset_values"] = {}
+
+    current_values = st.session_state["preset_values"].get(
+        preset,
+        {
+            "air": p_dict["air_temperature_k"],
+            "proc": p_dict["process_temperature_k"],
+            "rpm": p_dict["rotation_speed_rpm"],
+            "trq": p_dict["torque_nm"],
+            "wear": p_dict["tool_wear_min"],
+            "type": p_dict["machine_type"],
+        },
+    )
+
     c1, c2, c3 = st.columns(3)
-    air_val = c1.slider("Air Temp (K)", 295.0, 305.0, float(p_dict['air']), 0.1)
-    proc_val = c2.slider("Process Temp (K)", 305.0, 315.0, float(p_dict['proc']), 0.1)
-    rpm_val = c3.slider("Speed (RPM)", 1100, 2900, int(p_dict['rpm']), 10)
+    air_val = c1.slider("Air Temp (K)", 295.0, 305.0, float(current_values['air']), 0.1)
+    proc_val = c2.slider("Process Temp (K)", 305.0, 315.0, float(current_values['proc']), 0.1)
+    rpm_val = c3.slider("Speed (RPM)", 1100, 2900, int(current_values['rpm']), 10)
     c4, c5, c6 = st.columns(3)
-    trq_val = c4.slider("Torque (Nm)", 3.0, 80.0, float(p_dict['trq']), 0.5)
-    wear_val = c5.slider("Tool Wear (min)", 0, 260, int(p_dict['wear']), 1)
-    type_val = c6.selectbox("Variant Type", ["L", "M", "H"], index=["L", "M", "H"].index(p_dict['type']))
+    trq_val = c4.slider("Torque (Nm)", 3.0, 80.0, float(current_values['trq']), 0.5)
+    wear_val = c5.slider("Tool Wear (min)", 0, 260, int(current_values['wear']), 1)
+    type_val = c6.selectbox("Variant Type", ["L", "M", "H"], index=["L", "M", "H"].index(current_values['type']))
+
+    st.session_state["preset_values"][preset] = {
+        "air": air_val,
+        "proc": proc_val,
+        "rpm": rpm_val,
+        "trq": trq_val,
+        "wear": wear_val,
+        "type": type_val,
+    }
     inp_df = pd.DataFrame([{"air_temperature_k": air_val, "process_temperature_k": proc_val, "rotational_speed_rpm": rpm_val, "torque_nm": trq_val, "tool_wear_min": wear_val, "type": type_val}])
     out_df = predict_health(inp_df)
     p_val = out_df['failure_probability'].iloc[0]
@@ -263,7 +295,7 @@ if menu_choice == "1. Live Machine Health":
             'tool_wear_min': wear_val, 'failure_probability': p_val,
             'risk_tier': tier_val, 'anomaly_score': anom_val,
             'primary_failure_mode': presc_info['primary_failure_mode'],
-            'recommended_action': presc_info['recommended_action'],
+            'recommended_action': presc_info.get('action', presc_info.get('recommended_action', 'Continue monitoring')),
             'savings_usd': presc_info['savings_usd']
         })
         st.success(f"Record saved for {machine_id}")

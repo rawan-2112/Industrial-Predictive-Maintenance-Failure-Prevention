@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -263,3 +265,131 @@ def get_grounded_recommendation(
         "savings_usd": context["savings_usd"],
         "evidence": context["evidence"],
     }
+
+
+def retrieve_knowledge(query: str, top_k: int = 3) -> List[Dict[str, Any]]:
+    """Retrieve the most relevant KB entries with lightweight keyword overlap."""
+    query_terms = set(re.findall(r"[a-z0-9_]+", query.lower()))
+    scored_entries = []
+    for mode, entry in MAINTENANCE_KB.items():
+        mode_terms = set(re.findall(r"[a-z0-9_]+", mode.lower()))
+        text = " ".join([
+            mode,
+            str(entry.get("summary", "")),
+            str(entry.get("recommended_action", "")),
+            " ".join(entry.get("checklist", [])),
+            " ".join(entry.get("signals", [])),
+        ])
+        terms = set(re.findall(r"[a-z0-9_]+", text.lower()))
+        score = len(query_terms & terms) + (3 * len(query_terms & mode_terms))
+        if mode.lower() in query.lower():
+            score += 10
+        scored_entries.append((score, mode, entry))
+
+    scored_entries.sort(key=lambda item: (-item[0], item[1]))
+    return [
+        {"mode": mode, "knowledge": entry, "score": score}
+        for score, mode, entry in scored_entries[:max(1, top_k)]
+    ]
+
+
+def _allowed_spare_parts() -> set[str]:
+    return {
+        part
+        for entry in MAINTENANCE_KB.values()
+        for part in entry.get("parts", [])
+        if part != "None"
+    }
+
+
+def _merge_llm_recommendation(base: Dict[str, Any], candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Accept only the structured fields and spare parts supported by the KB."""
+    merged = base.copy()
+    for field in ("summary", "action", "priority", "eta"):
+        value = candidate.get(field)
+        if isinstance(value, str) and value.strip():
+            merged[field] = value.strip()
+
+    steps = candidate.get("maintenance_steps")
+    if isinstance(steps, list) and all(isinstance(step, str) and step.strip() for step in steps):
+        merged["maintenance_steps"] = steps[:6]
+
+    parts = candidate.get("required_spare_parts")
+    allowed_parts = _allowed_spare_parts()
+    if isinstance(parts, list):
+        valid_parts = [part for part in parts if isinstance(part, str) and part in allowed_parts]
+        if valid_parts or not parts:
+            merged["required_spare_parts"] = valid_parts or ["None"]
+        else:
+            merged["required_spare_parts"] = base["required_spare_parts"]
+    return merged
+
+
+def get_rag_recommendation(
+    failure_probability: float,
+    risk_tier: str,
+    failure_mode: Optional[str],
+    metrics: Optional[Dict[str, Any]] = None,
+    top_k: int = 3,
+) -> Dict[str, Any]:
+    """Use retrieved KB context with an optional LLM, then fall back safely."""
+    metrics = metrics or {}
+    deterministic = build_recommendation_context(
+        failure_probability, risk_tier, failure_mode, metrics
+    )
+    query = " ".join([
+        str(failure_mode or ""),
+        str(risk_tier),
+        f"failure probability {failure_probability:.3f}",
+        " ".join(f"{key} {value}" for key, value in metrics.items()),
+    ])
+    retrieved = retrieve_knowledge(query, top_k=top_k)
+    result = {
+        **deterministic,
+        "retrieved_context": [item["mode"] for item in retrieved],
+        "rag_used": False,
+    }
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return result
+
+    try:
+        from openai import OpenAI
+
+        context = json.dumps(
+            [{"mode": item["mode"], **item["knowledge"]} for item in retrieved],
+            ensure_ascii=True,
+        )
+        prompt = (
+            "You are a maintenance planner. Use ONLY the retrieved knowledge below. "
+            "Return one JSON object with exactly these keys: summary, action, priority, "
+            "eta, maintenance_steps, required_spare_parts. Do not invent parts, thresholds, "
+            "or procedures.\n\n"
+            f"Telemetry and model result:\n{query}\n\n"
+            f"Retrieved knowledge:\n{context}"
+        )
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": "Return valid JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+        )
+        content = response.choices[0].message.content or "{}"
+        candidate = json.loads(content)
+        if not isinstance(candidate, dict):
+            raise ValueError("LLM response was not a JSON object")
+        result = {
+            **_merge_llm_recommendation(deterministic, candidate),
+            "retrieved_context": [item["mode"] for item in retrieved],
+            "rag_used": True,
+        }
+    except Exception:
+        # A recommendation must remain available during API, parsing, or dependency failures.
+        pass
+
+    return result

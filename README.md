@@ -11,6 +11,7 @@ Repository: https://github.com/rawan-2112/Industrial-Predictive-Maintenance-Fail
 Industrial equipment failures create costly downtime, unsafe operating conditions, and unnecessary maintenance overhead. In manufacturing environments, the key challenge is not only to predict failure, but to do so with high recall while controlling false alarms and translating the prediction into practical maintenance actions.
 
 This project addresses that challenge by:
+
 - predicting machine failure probability from sensor and operating parameters
 - identifying abnormal operating behavior using anomaly detection
 - estimating business-risk decisions with cost-aware thresholds
@@ -28,6 +29,7 @@ The project uses the AI4I 2020 Predictive Maintenance Dataset from the UCI Machi
 - Target: machine failure detection
 
 Key dataset characteristics:
+
 - 10,000 rows
 - severe class imbalance (~3.39% failure rate)
 - sensor-driven operating conditions and engineered physical features
@@ -236,6 +238,7 @@ http://localhost:8501
 ### Dashboard features
 
 The application includes:
+
 - live machine health scoring
 - risk probability and anomaly detection
 - threshold-based risk tiers
@@ -244,6 +247,20 @@ The application includes:
 - sensor stream simulation
 - SQLite prediction history logging
 - data drift monitoring
+
+### Optional grounded RAG advisor
+
+The maintenance advisor uses the existing six-entry JSON knowledge base as a small retrieval corpus. It ranks entries with keyword overlap, sends the top three entries to an LLM when configured, and requests structured JSON. The deterministic maintenance rules remain the fallback for missing keys, API errors, invalid JSON, or unavailable dependencies. Generated spare parts are accepted only when they exactly match a part in the knowledge base.
+
+To enable the optional LLM call in PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY = "your-api-key"
+$env:OPENAI_MODEL = "gpt-4o-mini"  # optional
+streamlit run app.py
+```
+
+Leave `OPENAI_API_KEY` unset to use the deterministic recommendation engine without any external API calls.
 
 ### Run with Docker
 
@@ -320,6 +337,7 @@ Estimated savings vs reactive: ~$238,500
 ### Drift monitoring and audit trail
 
 The app includes:
+
 - PSI and KS-based feature drift checks
 - monitoring plots across features
 - SQLite prediction log entries
@@ -330,6 +348,7 @@ The app includes:
 This repository consolidates work from multiple members across the full project lifecycle.
 
 ### Member 1 — Data engineering and preprocessing
+
 - `notebooks/01_eda_preprocessing.ipynb`
 - `data/ai4i2020_cleaned.csv`
 - `data/ai4i2020_feature_ready.csv`
@@ -337,11 +356,13 @@ This repository consolidates work from multiple members across the full project 
 - `docs/pipeline_documentation.md`
 
 ### Member 2 — Classical machine learning and model building
+
 - `notebooks/02_classical_ml_predictive_maintenance_.ipynb`
 - model artifacts in `models/`
 - classical ML comparison and optimized thresholding outputs
 
 ### Member 3 — Evaluation, explainability, and risk logic
+
 - `notebooks/03_model_evaluation_explainability_risk.ipynb`
 - `figures/08_` through `figures/14_`
 - `models/evaluation_summary.json`
@@ -349,6 +370,7 @@ This repository consolidates work from multiple members across the full project 
 - `docs/evaluation_and_explainability.md`
 
 ### Member 4 — Deep learning anomaly detection
+
 - `notebooks/04_deep_learning_anomaly_detection.ipynb`
 - `figures/15_` through `figures/28_`
 - `models/deep_learning_thresholds.json`
@@ -356,6 +378,7 @@ This repository consolidates work from multiple members across the full project 
 - `models/autoencoder_anomaly_detector.keras`
 
 ### Member 5 — Deployment, monitoring, dashboard, and AI maintenance layer
+
 - `notebooks/05_deployment_mlops_monitoring_testing.ipynb`
 - `app.py`
 - `maintenance_agent.py`
@@ -367,6 +390,7 @@ This repository consolidates work from multiple members across the full project 
 ## Screenshots and result highlights
 
 The project includes a complete visual result set in `figures/`, covering:
+
 - EDA and outlier analysis
 - class imbalance and feature relationships
 - ROC / PR curves and confusion matrices
@@ -377,6 +401,7 @@ The project includes a complete visual result set in `figures/`, covering:
 - maintenance risk triage dashboard outputs
 
 Representative outputs:
+
 - `figures/08_roc_pr_curves.png`
 - `figures/10_threshold_cost_optimization.png`
 - `figures/12_shap_global_summary.png`
@@ -389,6 +414,7 @@ Representative outputs:
 ## Documentation
 
 Additional project documentation is available in `docs/`:
+
 - `docs/data_dictionary.md`
 - `docs/pipeline_documentation.md`
 - `docs/evaluation_and_explainability.md`
