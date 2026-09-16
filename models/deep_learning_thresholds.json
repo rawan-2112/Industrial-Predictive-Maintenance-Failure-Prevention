@@ -1,0 +1,14 @@
+{
+    "mlp": {
+        "threshold": 0.36000000000000004,
+        "selection_method": "validation_cost_optimization",
+        "false_negative_cost": 5000,
+        "false_positive_cost": 500
+    },
+    "autoencoder": {
+        "threshold": 0.23364410751787207,
+        "selection_method": "95th_percentile_healthy_validation_error",
+        "percentile": 95,
+        "score": "mean_squared_reconstruction_error"
+    }
+}
