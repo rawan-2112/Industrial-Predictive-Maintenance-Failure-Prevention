@@ -80,7 +80,10 @@ def assign_tier(p: float) -> str:
 
 def predict_health(df: pd.DataFrame) -> pd.DataFrame:
     feats = engineer_features(df)
-    probs = model.predict_proba(feats)[:, 1]
+    scaled_feats = feats.copy()
+    scaled_columns = list(getattr(scaler, 'feature_names_in_', []))
+    scaled_feats[scaled_columns] = scaler.transform(feats[scaled_columns])
+    probs = model.predict_proba(scaled_feats)[:, 1]
     anom = compute_anomaly(feats)
     res = df.copy()
     res['failure_probability'] = np.round(probs, 4)
@@ -272,6 +275,12 @@ if menu_choice == "1. Live Machine Health":
     st.plotly_chart(fig_g, use_container_width=True)
     
     st.subheader("Advanced Maintenance AI Advisor")
+    if presc_info.get("rag_used"):
+        st.success("OpenRouter advisor response active")
+    elif presc_info.get("rag_error"):
+        st.warning(f"OpenRouter advisor unavailable ({presc_info['rag_error']}); showing deterministic guidance.")
+    else:
+        st.caption("Deterministic guidance active. Configure OPENROUTER_API_KEY to enable the AI advisor.")
     st.info(f"Diagnosis: {presc_info['primary_failure_mode']} | Priority: {presc_info['priority']} | Window: {presc_info['eta']}")
     st.write(f"Grounded summary: {presc_info['summary']}")
     st.write(f"Recommended action: {presc_info['action'] if 'action' in presc_info else presc_info['recommended_action']}")

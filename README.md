@@ -252,15 +252,15 @@ The application includes:
 
 The maintenance advisor uses the existing six-entry JSON knowledge base as a small retrieval corpus. It ranks entries with keyword overlap, sends the top three entries to an LLM when configured, and requests structured JSON. The deterministic maintenance rules remain the fallback for missing keys, API errors, invalid JSON, or unavailable dependencies. Generated spare parts are accepted only when they exactly match a part in the knowledge base.
 
-To enable the optional LLM call in PowerShell:
+To enable the optional LLM call with OpenRouter in PowerShell:
 
 ```powershell
-$env:OPENAI_API_KEY = "your-api-key"
-$env:OPENAI_MODEL = "gpt-4o-mini"  # optional
+$env:OPENROUTER_API_KEY = "your-openrouter-key"
+$env:OPENROUTER_MODEL = "openai/gpt-4o-mini"  # optional
 streamlit run app.py
 ```
 
-Leave `OPENAI_API_KEY` unset to use the deterministic recommendation engine without any external API calls.
+The app also accepts `OPENAI_API_KEY` for direct OpenAI usage. Leave both keys unset to use the deterministic recommendation engine without external API calls.
 
 ### Run with Docker
 

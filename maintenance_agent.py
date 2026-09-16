@@ -350,7 +350,7 @@ def get_rag_recommendation(
         "rag_used": False,
     }
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         return result
 
@@ -369,9 +369,15 @@ def get_rag_recommendation(
             f"Telemetry and model result:\n{query}\n\n"
             f"Retrieved knowledge:\n{context}"
         )
-        client = OpenAI(api_key=api_key)
+        is_openrouter = bool(os.getenv("OPENROUTER_API_KEY"))
+        default_base_url = "https://openrouter.ai/api/v1" if is_openrouter else "https://api.openai.com/v1"
+        default_model = "openai/gpt-4o-mini" if is_openrouter else "gpt-4o-mini"
+        client = OpenAI(
+            api_key=api_key,
+            base_url=os.getenv("OPENAI_BASE_URL", default_base_url),
+        )
         response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            model=os.getenv("OPENROUTER_MODEL", os.getenv("OPENAI_MODEL", default_model)),
             messages=[
                 {"role": "system", "content": "Return valid JSON only."},
                 {"role": "user", "content": prompt},
@@ -388,8 +394,8 @@ def get_rag_recommendation(
             "retrieved_context": [item["mode"] for item in retrieved],
             "rag_used": True,
         }
-    except Exception:
+    except Exception as exc:
         # A recommendation must remain available during API, parsing, or dependency failures.
-        pass
+        result["rag_error"] = f"LLM request failed: {type(exc).__name__}"
 
     return result

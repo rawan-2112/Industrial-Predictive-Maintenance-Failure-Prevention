@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import os
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -13,7 +14,7 @@ from maintenance_agent import (
 )
 
 from app import get_preset_params
-
+from openai import OpenAI
 
 def test_build_recommendation_context_for_high_risk_tool_wear():
     context = build_recommendation_context(
@@ -81,6 +82,26 @@ def test_rag_falls_back_without_api_key(monkeypatch):
     )
 
     assert recommendation["rag_used"] is False
+    assert recommendation["required_spare_parts"] == [
+        "Carbide Insert Set (Part #T-880)",
+        "Spindle Locking Fixture (Part #S-310)",
+    ]
+
+def test_get_rag_recommendation_with_api_key():
+    api_key = os.getenv("OPENAI_API_KEY")
+    client = OpenAI(
+        api_key=api_key,
+        base_url=os.getenv("OPENAI_BASE_URL"),
+    )
+
+    recommendation = get_rag_recommendation(
+        failure_probability=0.82,
+        risk_tier="Critical Risk",
+        failure_mode="Tool Wear Failure (TWF)",
+        metrics={"tool_wear_min": 225, "torque_nm": 48.0},
+    )
+
+    assert recommendation["rag_used"] is True
     assert recommendation["required_spare_parts"] == [
         "Carbide Insert Set (Part #T-880)",
         "Spindle Locking Fixture (Part #S-310)",
